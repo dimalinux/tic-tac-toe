@@ -26,7 +26,7 @@ impl Game {
     }
 
     fn current_player_index(&self) -> usize {
-        ((self.turn - 1) % 2) as usize
+        ((self.turn - 1) & 1) as usize
     }
 
     pub fn current_player(&self) -> Pubkey {
@@ -35,20 +35,10 @@ impl Game {
 
     pub fn play(&mut self, tile: &Tile) -> Result<()> {
         require!(self.is_active(), TicTacToeError::GameAlreadyOver);
-
-        match tile {
-            tile @ Tile {
-                row: 0..=2,
-                column: 0..=2,
-            } => match self.board[tile.row as usize][tile.column as usize] {
-                Some(_) => return Err(TicTacToeError::TileAlreadySet.into()),
-                None => {
-                    self.board[tile.row as usize][tile.column as usize] =
-                        Some(Sign::from_usize(self.current_player_index()).unwrap());
-                }
-            },
-            _ => return Err(TicTacToeError::TileOutOfBounds.into()),
-        }
+        require!(tile.row < 3 && tile.column < 3, TicTacToeError::TileOutOfBounds);
+        let (r, c) = (tile.row as usize, tile.column as usize);
+        require!(self.board[r][c].is_none(), TicTacToeError::TileAlreadySet);
+        self.board[r][c] = Some(Sign::from_usize(self.current_player_index()).unwrap());
 
         self.update_state();
 
@@ -68,14 +58,14 @@ impl Game {
 
     fn update_state(&mut self) {
         if self.turn >= 5 {
-            if self.is_winning_trio([(0, 0), (0, 1), (0, 2)]) ||
-                self.is_winning_trio([(1, 0), (1, 1), (1, 2)]) ||
-                self.is_winning_trio([(2, 0), (2, 1), (2, 2)]) ||
-                self.is_winning_trio([(0, 0), (1, 0), (2, 0)]) ||
-                self.is_winning_trio([(0, 1), (1, 1), (2, 1)]) ||
-                self.is_winning_trio([(0, 2), (1, 2), (2, 2)]) ||
-                self.is_winning_trio([(0, 0), (1, 1), (2, 2)]) ||
-                self.is_winning_trio([(0, 2), (1, 1), (2, 0)]) {
+            if self.is_winning_trio([(0, 0), (0, 1), (0, 2)]) ||  // row 0
+                self.is_winning_trio([(1, 0), (1, 1), (1, 2)]) || // row 1
+                self.is_winning_trio([(2, 0), (2, 1), (2, 2)]) || // row 2
+                self.is_winning_trio([(0, 0), (1, 0), (2, 0)]) || // column 0
+                self.is_winning_trio([(0, 1), (1, 1), (2, 1)]) || // column 1
+                self.is_winning_trio([(0, 2), (1, 2), (2, 2)]) || // column 2
+                self.is_winning_trio([(0, 0), (1, 1), (2, 2)]) || // diagonal left to right
+                self.is_winning_trio([(0, 2), (1, 1), (2, 0)]) {  // diagonal right to left
                 self.state = GameState::Won {
                     winner: self.current_player(),
                 };
@@ -111,3 +101,15 @@ pub struct Tile {
     row: u8,
     column: u8,
 }
+
+
+// #[cfg(test)]
+// mod tests {
+//     use crate::state::Game;
+//
+//     #[test]
+//     fn test_game_size() {
+//         assert_eq!(std::mem::size_of::<Game>(), Game::MAXIMUM_SIZE);
+//     }
+//
+// }
