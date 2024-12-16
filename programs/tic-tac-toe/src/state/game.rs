@@ -67,47 +67,27 @@ impl Game {
     }
 
     fn update_state(&mut self) {
-        for i in 0..=2 {
-            // three of the same in one row
-            if self.is_winning_trio([(i, 0), (i, 1), (i, 2)]) {
+        if self.turn >= 5 {
+            if self.is_winning_trio([(0, 0), (0, 1), (0, 2)]) ||
+                self.is_winning_trio([(1, 0), (1, 1), (1, 2)]) ||
+                self.is_winning_trio([(2, 0), (2, 1), (2, 2)]) ||
+                self.is_winning_trio([(0, 0), (1, 0), (2, 0)]) ||
+                self.is_winning_trio([(0, 1), (1, 1), (2, 1)]) ||
+                self.is_winning_trio([(0, 2), (1, 2), (2, 2)]) ||
+                self.is_winning_trio([(0, 0), (1, 1), (2, 2)]) ||
+                self.is_winning_trio([(0, 2), (1, 1), (2, 0)]) {
                 self.state = GameState::Won {
                     winner: self.current_player(),
                 };
                 return;
             }
-            // three of the same in one column
-            if self.is_winning_trio([(0, i), (1, i), (2, i)]) {
-                self.state = GameState::Won {
-                    winner: self.current_player(),
-                };
-                return;
-            }
         }
 
-        // three of the same in one diagonal
-        if self.is_winning_trio([(0, 0), (1, 1), (2, 2)])
-            || self.is_winning_trio([(0, 2), (1, 1), (2, 0)])
-        {
-            self.state = GameState::Won {
-                winner: self.current_player(),
-            };
-            return;
+        // maintain the state as Active if there have been less than 9 turns
+        // and no one has won yet
+        if self.turn >= 9 {
+            self.state = GameState::Tie;
         }
-
-        // reaching this code means the game has not been won,
-        // so if there are unfilled tiles left, it's still active
-        for row in 0..=2 {
-            for column in 0..=2 {
-                if self.board[row][column].is_none() {
-                    return;
-                }
-            }
-        }
-
-        // game has not been won
-        // game has no more free tiles
-        // -> game ends in a tie
-        self.state = GameState::Tie;
     }
 }
 
