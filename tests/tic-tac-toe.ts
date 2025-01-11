@@ -9,6 +9,15 @@ type PublicKey = anchor.web3.PublicKey;
 
 type Tile = [number, number]; // (x, y) coordinates for a play
 
+type GameState =
+    | { active: {} }
+    | { tie: {} }
+    | { won: { winner: PublicKey } };
+
+const ACTIVE_STATE: GameState = { active: {} };
+const TIE_STATE: GameState = { tie: {} };
+
+
 type Sign = { x: {} } | { o: {} } | null;
 
 type Board = [
@@ -26,8 +35,8 @@ function addressString(publicKey: PublicKey, name: string) {
 }
 
 class Game {
-    public program: Program<TicTacToe>;
-    public programProvider: anchor.AnchorProvider; // TODO: make const and private
+    public readonly program: Program<TicTacToe>;
+    private readonly programProvider: anchor.AnchorProvider;
     public gameKeypair:  anchor.web3.Keypair;
     public playerOne:  Wallet;
     public playerTwo:  anchor.web3.Keypair;
@@ -63,9 +72,9 @@ class Game {
         this.turnNumber = 1;
         this.gameKeypair = anchor.web3.Keypair.generate();
 
-        await this.printBalance("game key at start", this.gameKeypair.publicKey);
-        await this.printBalance("player one at start", this.playerOne.publicKey);
-        await this.printBalance("player two at start", this.playerTwo.publicKey);
+        //await this.printBalance("game key at start", this.gameKeypair.publicKey);
+        //await this.printBalance("player one at start", this.playerOne.publicKey);
+        //await this.printBalance("player two at start", this.playerTwo.publicKey);
 
         await this.program.methods
             .setupGame(playerTwo.publicKey)
@@ -81,23 +90,20 @@ class Game {
         let gameState = await this.program.account.game.fetch(this.gameKeypair.publicKey);
         expect(gameState.turn).to.equal(1);
         expect(gameState.players).to.eql([playerOne.publicKey, playerTwo.publicKey]);
-        expect(gameState.state).to.eql({active: {}});
+        expect(gameState.state).to.eql(ACTIVE_STATE);
         expect(gameState.board).to.eql(this.expectedBoard);
 
-        await this.printBalance("game after setup", this.gameKeypair.publicKey);
-        await this.printBalance("player one after setup", this.playerOne.publicKey);
-        await this.printBalance("player two after setup", this.playerTwo.publicKey);
+        //await this.printBalance("game after setup", this.gameKeypair.publicKey);
+        //await this.printBalance("player one after setup", this.playerOne.publicKey);
+        //await this.printBalance("player two after setup", this.playerTwo.publicKey);
     }
 
-    public async play(
-        tile: Tile,
-        expectedGameState: any, // TODO: This should not be "any"
-    ): Promise<void> {
+    public async play(tile: Tile, expectedGameState: GameState): Promise<void> {
 
         // let variable named "player" be equal to player1 if the turn is odd, else player2
         let player:Keypair|Wallet = this.turnNumber % 2 === 1 ? this.playerOne : this.playerTwo;
 
-        await this.printBalance("before play", player.publicKey);
+        //await this.printBalance("before play", player.publicKey);
 
         let expectedBoard: Board = [...this.expectedBoard];
         let expectedTurn = this.turnNumber;
@@ -127,7 +133,7 @@ class Game {
             .to
             .eql(expectedBoard);
 
-        await this.printBalance("after play", player.publicKey);
+        //await this.printBalance("after play", player.publicKey);
 
         // play() above didn't error, so we can update the turn number
         this.turnNumber = expectedTurn;
@@ -152,7 +158,7 @@ describe('tic-tac-toe', () => {
         let game = new Game(program);
         await game.setupGame(null, null);
 
-        await game.play([0, 0], {active: {}});
+        await game.play([0, 0], ACTIVE_STATE);
 
         // try {
         //     await game.play(
@@ -181,12 +187,12 @@ describe('tic-tac-toe', () => {
         //     expect(err.error.comparedValues).to.deep.equal([playerTwo.publicKey, playerOne.publicKey]);
         // }
 
-        await game.play([1, 0], {active: {}});
-        await game.play([0, 1], {active: {}});
+        await game.play([1, 0], ACTIVE_STATE);
+        await game.play([0, 1], ACTIVE_STATE);
 
         try {
             // row 5 is out of bounds
-            await game.play([5, 1], {active: {}});
+            await game.play([5, 1], ACTIVE_STATE);
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
             expect(_err).to.be.instanceOf(AnchorError);
@@ -195,10 +201,10 @@ describe('tic-tac-toe', () => {
             expect(err.error.errorCode.code).to.equal("TileOutOfBounds");
         }
 
-        await game.play([1, 1], {active: {}});
+        await game.play([1, 1], ACTIVE_STATE);
 
         try {
-            await game.play([0, 0], {active: {}});
+            await game.play([0, 0], ACTIVE_STATE);
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
             expect(_err).to.be.instanceOf(AnchorError);
@@ -210,7 +216,7 @@ describe('tic-tac-toe', () => {
         await game.play([0, 2], {won: {winner: game.playerOnePubkey()}});
 
         try {
-            // make a play after the game is one
+            // make a play after the game is won
             await game.play([0, 2], {won: {winner: game.playerOnePubkey()}});
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
@@ -226,14 +232,14 @@ describe('tic-tac-toe', () => {
         let game = new Game(program);
         await game.setupGame(null, null);
 
-        await game.play([0, 0], {active: {}});
-        await game.play([1, 1], {active: {}});
-        await game.play([2, 0], {active: {}});
-        await game.play([1, 0], {active: {}});
-        await game.play([1, 2], {active: {}});
-        await game.play([0, 1], {active: {}});
-        await game.play([2, 1], {active: {}});
-        await game.play([2, 2], {active: {}});
-        await game.play([0, 2], {tie: {}});
+        await game.play([0, 0], ACTIVE_STATE);
+        await game.play([1, 1], ACTIVE_STATE);
+        await game.play([2, 0], ACTIVE_STATE);
+        await game.play([1, 0], ACTIVE_STATE);
+        await game.play([1, 2], ACTIVE_STATE);
+        await game.play([0, 1], ACTIVE_STATE);
+        await game.play([2, 1], ACTIVE_STATE);
+        await game.play([2, 2], ACTIVE_STATE);
+        await game.play([0, 2], TIE_STATE);
     })
 });
