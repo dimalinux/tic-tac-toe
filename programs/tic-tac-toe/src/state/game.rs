@@ -101,15 +101,3 @@ pub struct Tile {
     row: u8,
     column: u8,
 }
-
-
-// #[cfg(test)]
-// mod tests {
-//     use crate::state::Game;
-//
-//     #[test]
-//     fn test_game_size() {
-//         assert_eq!(std::mem::size_of::<Game>(), Game::MAXIMUM_SIZE);
-//     }
-//
-// }

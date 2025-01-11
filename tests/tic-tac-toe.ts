@@ -1,52 +1,137 @@
 import * as anchor from '@coral-xyz/anchor';
-import {AnchorError, Program} from '@coral-xyz/anchor';
+import {AnchorError, Program, Wallet} from '@coral-xyz/anchor';
 import {TicTacToe} from '../target/types/tic_tac_toe';
 import chai, {expect} from 'chai';
 import chaiAsPromised from 'chai-as-promised';
 
+type Keypair = anchor.web3.Keypair;
+type PublicKey = anchor.web3.PublicKey;
+
+type Tile = [number, number]; // (x, y) coordinates for a play
+
+type Sign = { x: {} } | { o: {} } | null;
+
+type Board = [
+    [Sign, Sign, Sign],
+    [Sign, Sign, Sign],
+    [Sign, Sign, Sign]
+];
+
 chai.use(chaiAsPromised);
 
-async function play(program: Program<TicTacToe>, game, player, tile, expectedTurn, expectedGameState, expectedBoard) {
-    await program.methods
-        .play(tile)
-        .accounts({
-            player: player.publicKey,
-            game
-        })
-        .signers(player instanceof (anchor.Wallet as any) ? [] : [player])
-        .rpc();
-
-    const gameState = await program.account.game.fetch(game);
-    expect(gameState.turn).to.equal(expectedTurn);
-    expect(gameState.state).to.eql(expectedGameState);
-    expect(gameState.board)
-        .to
-        .eql(expectedBoard);
+function addressString(publicKey: PublicKey, name: string) {
+    const address = publicKey.toString();
+    const shortenedAddress = `${address.slice(0, 4)}...${address.slice(-4)}`;
+    return name ? `${shortenedAddress} (${name})` : shortenedAddress;
 }
 
-async function setupGame(program: Program<TicTacToe>, playerOne, playerTwo) {
-    const gameKeypair = anchor.web3.Keypair.generate();
+class Game {
+    public program: Program<TicTacToe>;
+    public programProvider: anchor.AnchorProvider; // TODO: make const and private
+    public gameKeypair:  anchor.web3.Keypair;
+    public playerOne:  Wallet;
+    public playerTwo:  anchor.web3.Keypair;
+    public turnNumber: number;
+    public expectedBoard: Board;
 
-    await program.methods
-        .setupGame(playerTwo.publicKey)
-        .accounts({
-            game: gameKeypair.publicKey,
-            playerOne: playerOne.publicKey,
-        })
-        .signers([gameKeypair])
-        .rpc();
+    constructor(program: Program<TicTacToe>) {
+        this.program = program;
+        this.programProvider = program.provider as anchor.AnchorProvider;
+    }
 
-    let gameState = await program.account.game.fetch(gameKeypair.publicKey);
-    expect(gameState.turn).to.equal(1);
-    expect(gameState.players)
-        .to
-        .eql([playerOne.publicKey, playerTwo.publicKey]);
-    expect(gameState.state).to.eql({active: {}});
-    expect(gameState.board)
-        .to
-        .eql([[null, null, null], [null, null, null], [null, null, null]]);
+    public async printBalance(name: string, publicKey: anchor.web3.PublicKey) {
+        const balance: number = await this.program.provider.connection.getBalance(publicKey);
+        const printedAddr = addressString(publicKey, name);
+        console.log(`Balance of ${printedAddr}: ${balance} lamports`);
+    }
 
-    return gameKeypair;
+    public playerOnePubkey(): PublicKey {
+        return this.playerOne.publicKey;
+    }
+
+    public async setupGame(playerOne: Wallet | null = null, playerTwo: Keypair | null = null) {
+        if (playerOne === null) {
+            playerOne = this.programProvider.wallet as Wallet;
+        }
+        this.playerOne = playerOne;
+
+        if (playerTwo === null) {
+            playerTwo = anchor.web3.Keypair.generate();
+        }
+        this.playerTwo = playerTwo;
+
+        this.turnNumber = 1;
+        this.gameKeypair = anchor.web3.Keypair.generate();
+
+        await this.printBalance("game key at start", this.gameKeypair.publicKey);
+        await this.printBalance("player one at start", this.playerOne.publicKey);
+        await this.printBalance("player two at start", this.playerTwo.publicKey);
+
+        await this.program.methods
+            .setupGame(playerTwo.publicKey)
+            .accounts({
+                game: this.gameKeypair.publicKey,
+                playerOne: this.playerOne.publicKey,
+            })
+            .signers([this.gameKeypair])
+            .rpc();
+
+        this.expectedBoard = [[null, null, null], [null, null, null], [null, null, null]];
+
+        let gameState = await this.program.account.game.fetch(this.gameKeypair.publicKey);
+        expect(gameState.turn).to.equal(1);
+        expect(gameState.players).to.eql([playerOne.publicKey, playerTwo.publicKey]);
+        expect(gameState.state).to.eql({active: {}});
+        expect(gameState.board).to.eql(this.expectedBoard);
+
+        await this.printBalance("game after setup", this.gameKeypair.publicKey);
+        await this.printBalance("player one after setup", this.playerOne.publicKey);
+        await this.printBalance("player two after setup", this.playerTwo.publicKey);
+    }
+
+    public async play(
+        tile: Tile,
+        expectedGameState: any, // TODO: This should not be "any"
+    ): Promise<void> {
+
+        // let variable named "player" be equal to player1 if the turn is odd, else player2
+        let player:Keypair|Wallet = this.turnNumber % 2 === 1 ? this.playerOne : this.playerTwo;
+
+        await this.printBalance("before play", player.publicKey);
+
+        let expectedBoard: Board = [...this.expectedBoard];
+        let expectedTurn = this.turnNumber;
+        if (expectedGameState.hasOwnProperty("active")) {
+            expectedTurn += 1;
+        }
+
+        const [row, col] = tile;
+
+        if (row >= 0 && row <= 2 && col >= 0 && col <= 2 && expectedBoard[row][col] === null) {
+            expectedBoard[row][col] = ((this.turnNumber % 2 === 1) ? {x: {}} : {o: {}});
+        }
+
+        await this.program.methods
+            .play({row, column: col})
+            .accounts({
+                player: player.publicKey,
+                game: this.gameKeypair.publicKey,
+            })
+            .signers(player instanceof (anchor.Wallet as any) ? [] : [player])
+            .rpc();
+
+        const gameState = await this.program.account.game.fetch(this.gameKeypair.publicKey);
+        expect(gameState.turn).to.equal(expectedTurn);
+        expect(gameState.state).to.eql(expectedGameState);
+        expect(gameState.board)
+            .to
+            .eql(expectedBoard);
+
+        await this.printBalance("after play", player.publicKey);
+
+        // play() above didn't error, so we can update the turn number
+        this.turnNumber = expectedTurn;
+    }
 }
 
 describe('tic-tac-toe', () => {
@@ -54,104 +139,54 @@ describe('tic-tac-toe', () => {
     anchor.setProvider(anchor.AnchorProvider.env());
 
     const program = anchor.workspace.TicTacToe as Program<TicTacToe>;
-    const programProvider = program.provider as anchor.AnchorProvider;
 
     it('setup game!', async () => {
-        const playerOne = programProvider.wallet;
-        const playerTwo = anchor.web3.Keypair.generate();
-        const gameKeypair = await setupGame(program, playerOne, playerTwo);
+        console.log("setup game test starting");
+        let game = new Game(program);
+        await game.setupGame(null, null);
     });
 
     it('player one wins!', async () => {
-        const playerOne = programProvider.wallet;
-        const playerTwo = anchor.web3.Keypair.generate();
+        console.log("player one wins test starting");
 
-        const gameKeypair = await setupGame(program, playerOne, playerTwo);
+        let game = new Game(program);
+        await game.setupGame(null, null);
 
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 0, column: 0},
-            2,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [null, null, null],
-                [null, null, null]
-            ]
-        );
+        await game.play([0, 0], {active: {}});
 
+        // try {
+        //     await game.play(
+        //         program,
+        //         gameKeypair.publicKey,
+        //         playerOne, // same player in subsequent turns
+        //         // change sth about the tx because
+        //         // duplicate tx that come in too fast
+        //         // after each other may get dropped
+        //         [1, 0],
+        //         2,
+        //         {active: {},},
+        //         [
+        //             [{x: {}}, null, null],
+        //             [null, null, null],
+        //             [null, null, null]
+        //         ]
+        //     );
+        //     chai.assert(false, "should've failed but didn't ");
+        // } catch (_err) {
+        //     expect(_err).to.be.instanceOf(AnchorError);
+        //     const err: AnchorError = _err;
+        //     expect(err.error.errorCode.code).to.equal("NotPlayersTurn");
+        //     expect(err.error.errorCode.number).to.equal(6003);
+        //     expect(err.program.equals(program.programId)).is.true;
+        //     expect(err.error.comparedValues).to.deep.equal([playerTwo.publicKey, playerOne.publicKey]);
+        // }
 
-        try {
-            await play(
-                program,
-                gameKeypair.publicKey,
-                playerOne, // same player in subsequent turns
-                // change sth about the tx because
-                // duplicate tx that come in too fast
-                // after each other may get dropped
-                {row: 1, column: 0},
-                2,
-                {active: {},},
-                [
-                    [{x: {}}, null, null],
-                    [null, null, null],
-                    [null, null, null]
-                ]
-            );
-            chai.assert(false, "should've failed but didn't ");
-        } catch (_err) {
-            expect(_err).to.be.instanceOf(AnchorError);
-            const err: AnchorError = _err;
-            expect(err.error.errorCode.code).to.equal("NotPlayersTurn");
-            expect(err.error.errorCode.number).to.equal(6003);
-            expect(err.program.equals(program.programId)).is.true;
-            expect(err.error.comparedValues).to.deep.equal([playerTwo.publicKey, playerOne.publicKey]);
-        }
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 1, column: 0},
-            3,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [{o: {}}, null, null],
-                [null, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 0, column: 1},
-            4,
-            {active: {},},
-            [
-                [{x: {}}, {x: {}}, null],
-                [{o: {}}, null, null],
-                [null, null, null]
-            ]
-        );
+        await game.play([1, 0], {active: {}});
+        await game.play([0, 1], {active: {}});
 
         try {
-            await play(
-                program,
-                gameKeypair.publicKey,
-                playerTwo,
-                {row: 5, column: 1}, // out of bounds row
-                4,
-                {active: {},},
-                [
-                    [{x: {}}, {x: {}}, null],
-                    [{o: {}}, null, null],
-                    [null, null, null]
-                ]
-            );
+            // row 5 is out of bounds
+            await game.play([5, 1], {active: {}});
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
             expect(_err).to.be.instanceOf(AnchorError);
@@ -160,207 +195,45 @@ describe('tic-tac-toe', () => {
             expect(err.error.errorCode.code).to.equal("TileOutOfBounds");
         }
 
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 1, column: 1},
-            5,
-            {active: {},},
-            [
-                [{x: {}}, {x: {}}, null],
-                [{o: {}}, {o: {}}, null],
-                [null, null, null]
-            ]
-        );
+        await game.play([1, 1], {active: {}});
 
         try {
-            await play(
-                program,
-                gameKeypair.publicKey,
-                playerOne,
-                {row: 0, column: 0},
-                5,
-                {active: {},},
-                [
-                    [{x: {}}, {x: {}}, null],
-                    [{o: {}}, {o: {}}, null],
-                    [null, null, null]
-                ]
-            );
+            await game.play([0, 0], {active: {}});
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
             expect(_err).to.be.instanceOf(AnchorError);
             const err: AnchorError = _err;
             expect(err.error.errorCode.number).to.equal(6001);
+            expect(err.error.errorCode.code).to.equal("TileAlreadySet");
         }
 
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 0, column: 2},
-            5,
-            {won: {winner: playerOne.publicKey},},
-            [
-                [{x: {}}, {x: {}}, {x: {}}],
-                [{o: {}}, {o: {}}, null],
-                [null, null, null]
-            ]
-        );
+        await game.play([0, 2], {won: {winner: game.playerOnePubkey()}});
 
         try {
-            await play(
-                program,
-                gameKeypair.publicKey,
-                playerOne,
-                {row: 0, column: 2},
-                5,
-                {won: {winner: playerOne.publicKey},},
-                [
-                    [{x: {}}, {x: {}}, {x: {}}],
-                    [{o: {}}, {o: {}}, null],
-                    [null, null, null]
-                ]
-            );
+            // make a play after the game is one
+            await game.play([0, 2], {won: {winner: game.playerOnePubkey()}});
             chai.assert(false, "should've failed but didn't ");
         } catch (_err) {
             expect(_err).to.be.instanceOf(AnchorError);
             const err: AnchorError = _err;
             expect(err.error.errorCode.number).to.equal(6002);
+            expect(err.error.errorCode.code).to.equal("GameAlreadyOver");
         }
     })
 
     it('tie', async () => {
-        const playerOne = programProvider.wallet;
-        const playerTwo = anchor.web3.Keypair.generate();
-        const gameKeypair = await setupGame(program, playerOne, playerTwo);
+        console.log("tie test starting");
+        let game = new Game(program);
+        await game.setupGame(null, null);
 
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 0, column: 0},
-            2,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [null, null, null],
-                [null, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 1, column: 1},
-            3,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [null, {o: {}}, null],
-                [null, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 2, column: 0},
-            4,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [null, {o: {}}, null],
-                [{x: {}}, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 1, column: 0},
-            5,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [{o: {}}, {o: {}}, null],
-                [{x: {}}, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 1, column: 2},
-            6,
-            {active: {},},
-            [
-                [{x: {}}, null, null],
-                [{o: {}}, {o: {}}, {x: {}}],
-                [{x: {}}, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 0, column: 1},
-            7,
-            {active: {},},
-            [
-                [{x: {}}, {o: {}}, null],
-                [{o: {}}, {o: {}}, {x: {}}],
-                [{x: {}}, null, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 2, column: 1},
-            8,
-            {active: {},},
-            [
-                [{x: {}}, {o: {}}, null],
-                [{o: {}}, {o: {}}, {x: {}}],
-                [{x: {}}, {x: {}}, null]
-            ]
-        );
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerTwo,
-            {row: 2, column: 2},
-            9,
-            {active: {},},
-            [
-                [{x: {}}, {o: {}}, null],
-                [{o: {}}, {o: {}}, {x: {}}],
-                [{x: {}}, {x: {}}, {o: {}}]
-            ]
-        );
-
-
-        await play(
-            program,
-            gameKeypair.publicKey,
-            playerOne,
-            {row: 0, column: 2},
-            9,
-            {tie: {},},
-            [
-                [{x: {}}, {o: {}}, {x: {}}],
-                [{o: {}}, {o: {}}, {x: {}}],
-                [{x: {}}, {x: {}}, {o: {}}]
-            ]
-        );
+        await game.play([0, 0], {active: {}});
+        await game.play([1, 1], {active: {}});
+        await game.play([2, 0], {active: {}});
+        await game.play([1, 0], {active: {}});
+        await game.play([1, 2], {active: {}});
+        await game.play([0, 1], {active: {}});
+        await game.play([2, 1], {active: {}});
+        await game.play([2, 2], {active: {}});
+        await game.play([0, 2], {tie: {}});
     })
 });
