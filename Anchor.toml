@@ -1,12 +1,22 @@
 [toolchain]
-anchor_version = "0.29.0"
-solana_version = "1.17.0"
+anchor_version = "0.30.1"
+solana_version = "1.18.22"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+tic_tac_toe = "6a9rKhtTGmCtKuxJCetCopbW5A5Z3A6hUsBq5mf1i3D"
 
 [programs.localnet]
-tic_tac_toe = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+tic_tac_toe = "6a9rKhtTGmCtKuxJCetCopbW5A5Z3A6hUsBq5mf1i3D"
+
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

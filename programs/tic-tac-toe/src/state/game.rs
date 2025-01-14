@@ -1,7 +1,5 @@
 use crate::errors::TicTacToeError;
 use anchor_lang::prelude::*;
-use num_derive::*;
-use num_traits::*;
 
 #[account]
 pub struct Game {
@@ -38,7 +36,7 @@ impl Game {
         require!(tile.row < 3 && tile.column < 3, TicTacToeError::TileOutOfBounds);
         let (r, c) = (tile.row as usize, tile.column as usize);
         require!(self.board[r][c].is_none(), TicTacToeError::TileAlreadySet);
-        self.board[r][c] = Some(Sign::from_usize(self.current_player_index()).unwrap());
+        self.board[r][c] = Some(Sign::from(self.current_player_index()));
 
         self.update_state();
 
@@ -89,11 +87,21 @@ pub enum GameState {
 }
 
 #[derive(
-    AnchorSerialize, AnchorDeserialize, FromPrimitive, ToPrimitive, Copy, Clone, PartialEq, Eq,
+    AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq,
 )]
 pub enum Sign {
     X,
     O,
+}
+
+impl From<usize> for Sign {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Sign::X,
+            1 => Sign::O,
+            _ => panic!("Invalid value for Sign"),
+        }
+    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
