@@ -6,18 +6,20 @@ solana_version = "1.18.22"
 resolution = true
 skip-lint = false
 
-[programs.devnet]
+[programs.localnet]
 tic_tac_toe = "6a9rKhtTGmCtKuxJCetCopbW5A5Z3A6hUsBq5mf1i3D"
 
-[programs.localnet]
+[programs.devnet]
 tic_tac_toe = "6a9rKhtTGmCtKuxJCetCopbW5A5Z3A6hUsBq5mf1i3D"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Devnet"
+#cluster = "Devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+generate-clients = "yarn ts-node ./scripts/generate-clients.ts"
