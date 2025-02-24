@@ -1,32 +1,70 @@
 #![allow(unexpected_cfgs)]
 
+use std::fs;
+
 use borsh::BorshSerialize;
 use dirs::home_dir;
+use once_cell::sync::Lazy;
 use solana_client::rpc_client::RpcClient;
-use solana_program::instruction::AccountMeta;
 use solana_program::pubkey::Pubkey;
-use solana_program::system_program;
 use solana_sdk::{
-    instruction::Instruction,
+    instruction::{AccountMeta, Instruction},
+    native_token::lamports_to_sol,
     signature::{read_keypair_file, Keypair, Signer},
     signer::EncodableKey,
+    system_program,
     transaction::Transaction,
 };
-use solana_transaction_status::option_serializer::OptionSerializer;
-use solana_transaction_status::UiTransactionEncoding;
+use solana_transaction_status::{option_serializer::OptionSerializer, UiTransactionEncoding};
 
-const PROGRAM_KEYPAIR_PATH: &str = "../game/target/deploy/tic_tac_toe-keypair.json";
+#[derive(serde::Deserialize)]
+pub struct Config {
+    pub json_rpc_url: String,
+    pub keypair_path: String,
+}
+
+fn get_program_id() -> Pubkey {
+    const PROGRAM_KEYPAIR_PATH: &str = "../game/target/deploy/tic_tac_toe-keypair.json";
+    *Lazy::new(|| {
+        let program_id = read_keypair_file(PROGRAM_KEYPAIR_PATH).unwrap().pubkey();
+        let program_account = get_rpc_client().get_account(&program_id).unwrap();
+        if program_account.executable {
+            println!("Program ID: {}", program_id);
+        } else {
+            println!("ERROR PROGRAM ID NOT DEPLOYED: {}", program_id);
+        }
+        program_id
+    })
+}
+
+static SOLANA_CONFIG: Lazy<Config> = Lazy::new(|| {
+    let path = home_dir().unwrap().join(".config/solana/cli/config.yml");
+    let config_content = fs::read_to_string(path).unwrap();
+    serde_yaml::from_str(&config_content).unwrap()
+});
+
+fn get_rpc_client() -> RpcClient {
+    RpcClient::new(&SOLANA_CONFIG.json_rpc_url)
+}
 
 fn get_anchor_instruction_bytes(input: &str) -> Vec<u8> {
     let h = solana_sdk::hash::hash(input.as_bytes());
     h.as_ref()[0..8].to_vec()
 }
 
-async fn get_payer_key(rpc_client: &RpcClient) -> Keypair {
-    let payer =
-        Keypair::read_from_file(home_dir().unwrap().join(".config/solana/id.json")).unwrap();
-    let balance = rpc_client.get_balance(&payer.pubkey()).unwrap();
-    println!("Balance: {}", balance);
+fn print_balance(account_name: &str, pubkey: Pubkey) {
+    let balance_lamports = get_rpc_client().get_balance(&pubkey).unwrap();
+    println!(
+        "{} balance: {} SOL",
+        account_name,
+        lamports_to_sol(balance_lamports)
+    );
+}
+
+fn get_payer_key() -> Keypair {
+    let path = &*SOLANA_CONFIG.keypair_path;
+    let payer = Keypair::read_from_file(path).unwrap();
+    print_balance("Payer", payer.pubkey());
     payer
 }
 
@@ -43,15 +81,14 @@ async fn send_transaction_and_print_logs(
     if let OptionSerializer::Some(logs) = meta.log_messages {
         if logs.len() > 0 {
             println!("Logs:");
-        }
-        for log_message in logs {
-            println!("  {}", log_message);
+            for log_message in logs {
+                println!("  {}", log_message);
+            }
         }
     }
 
     Ok(())
 }
-
 
 async fn setup_game(
     rpc_client: &RpcClient,
@@ -69,10 +106,10 @@ async fn setup_game(
         program_id,
         &instruction_data,
         vec![
-            AccountMeta::new(game_keypair.pubkey(), true),
             AccountMeta::new(payer.pubkey(), true),
+            AccountMeta::new(game_keypair.pubkey(), true),
             AccountMeta::new_readonly(system_program::id(), false),
-            //AccountMeta::new(player_two, false),
+            AccountMeta::new_readonly(player_two, false),
         ],
     );
 
@@ -92,20 +129,10 @@ async fn setup_game(
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-    let program_id = read_keypair_file(PROGRAM_KEYPAIR_PATH).unwrap().pubkey();
-    println!("Program ID: {}", program_id);
-
-    let use_devnet = false;
-    let rpc_url: &str = if use_devnet {
-        "https://api.devnet.solana.com"
-    } else {
-        "http://localhost:8899"
-    };
-
+    let program_id = get_program_id();
+    let rpc_client = get_rpc_client();
+    let payer = get_payer_key();
     let player_two = Keypair::new();
-
-    let rpc_client = RpcClient::new(rpc_url);
-    let payer = get_payer_key(&rpc_client).await;
     let game_key_pair = setup_game(&rpc_client, program_id, &payer, player_two.pubkey()).await;
     println!("Game keypair: {}", game_key_pair.pubkey());
 }
