@@ -2419,7 +2419,6 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 name = "play-game"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "borsh 1.5.5",
  "dirs",
  "once_cell",
@@ -2429,8 +2428,7 @@ dependencies = [
  "solana-program",
  "solana-sdk",
  "solana-transaction-status",
- "time",
- "tokio",
+ "solana-transaction-status-client-types",
 ]
 
 [[package]]
