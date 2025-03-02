@@ -1,5 +1,3 @@
-use std::thread;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use once_cell::sync::Lazy;
 use solana_client::rpc_client::RpcClient;
@@ -14,21 +12,17 @@ use solana_sdk::{
 };
 
 use crate::{transaction::send_transaction_and_print_logs, util, util::get_anchor_discriminator};
-//type Tile = (usize, usize); // (x, y) coordinates for a play
+type Tile = (u8, u8); // (x, y) coordinates for a play
 
-// Todo: remove BorshSerialize
-#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Copy, Clone)]
-enum GameState {
+#[derive(BorshDeserialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum GameState {
     Active,
     Tie,
     Won { winner: Pubkey },
 }
 
-const ACTIVE_STATE: GameState = GameState::Active;
-//const TIE_STATE: GameState = GameState::Tie;
-
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
-enum Sign {
+#[derive(BorshDeserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sign {
     X,
     O,
 }
@@ -38,23 +32,21 @@ type Board = [[Option<Sign>; 3]; 3];
 static ACCOUNT_GAME_DISCRIMINATOR: Lazy<[u8; 8]> =
     Lazy::new(|| get_anchor_discriminator("account:Game"));
 
-#[derive(BorshSerialize, BorshDeserialize, Copy, Clone)]
+#[derive(BorshDeserialize, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GameAccount {
-    players: [Pubkey; 2],          // (32 * 2)
-    turn: u8,                      // 1
-    board: [[Option<Sign>; 3]; 3], // 9 * (1 + 1) = 18
-    state: GameState,              // 32 + 1
+    pub players: [Pubkey; 2], // (32 * 2)
+    pub turn: u8,             // 1
+    pub board: Board,         // 9 * (1 + 1) = 18
+    pub state: GameState,     // 32 + 1
 }
 
 pub struct Game {
-    program_id: Pubkey,
-    rpc_client_url: String,
-    print_balances: bool,
-    game_keypair: Keypair,
-    player_one: Keypair,
-    player_two: Keypair,
-    turn_number: usize,
-    expected_board: Board,
+    pub program_id: Pubkey,
+    pub rpc_client_url: String,
+    pub print_balances: bool,
+    pub game_keypair: Keypair,
+    pub player_one: Keypair,
+    pub player_two: Keypair,
 }
 
 impl Game {
@@ -71,13 +63,15 @@ impl Game {
             game_keypair: Keypair::new(),
             player_one,
             player_two,
-            turn_number: 1,
-            expected_board: Board::default(),
         }
     }
 
     pub fn game_id(&self) -> Pubkey {
         self.game_keypair.pubkey()
+    }
+
+    pub fn players(&self) -> [Pubkey; 2] {
+        [self.player_one.pubkey(), self.player_two.pubkey()]
     }
 
     fn rpc_client(&self, config: CommitmentConfig) -> RpcClient {
@@ -92,10 +86,10 @@ impl Game {
         );
     }
 
-    pub fn get_game_state(&mut self) -> GameAccount {
+    pub fn get_game_account(&self) -> GameAccount {
         let rpc_client =
             RpcClient::new_with_commitment(&self.rpc_client_url, CommitmentConfig::processed());
-        let game_state = rpc_client.get_account(&self.game_keypair.pubkey()).unwrap();
+        let game_state = rpc_client.get_account(&self.game_id()).unwrap();
         let account_data = game_state.data();
         assert!(account_data.len() > 8);
         let set_discriminator = &account_data[0..8];
@@ -104,9 +98,7 @@ impl Game {
         GameAccount::deserialize(&mut game_state).unwrap()
     }
 
-    pub fn setup_game(&mut self) {
-        self.turn_number = 1;
-
+    pub fn setup_game(&self) {
         if self.print_balances {
             self.print_balance("player one at start", &self.player_one.pubkey());
             self.print_balance("player two at start", &self.player_two.pubkey());
@@ -121,7 +113,7 @@ impl Game {
             self.program_id,
             &instruction_data,
             vec![
-                AccountMeta::new(self.game_keypair.pubkey(), true),
+                AccountMeta::new(self.game_id(), true),
                 AccountMeta::new(self.player_one.pubkey(), true),
                 AccountMeta::new_readonly(system_program::id(), false),
             ],
@@ -143,20 +135,72 @@ impl Game {
             }
         }
 
-        self.expected_board = [[None; 3]; 3];
-
-        thread::sleep(std::time::Duration::from_secs(10));
-        let game_state = self.get_game_state();
+        let game_state = self.get_game_account();
         assert_eq!(game_state.turn, 1);
         assert_eq!(game_state.players[0], self.player_one.pubkey());
         assert_eq!(game_state.players[1], self.player_two.pubkey());
-        assert_eq!(game_state.state, ACTIVE_STATE);
-        assert_eq!(game_state.board, self.expected_board);
+        assert_eq!(game_state.state, GameState::Active);
+        assert_eq!(game_state.board, [[None; 3]; 3]);
 
         if self.print_balances {
-            self.print_balance("game after setup", &self.game_keypair.pubkey());
+            self.print_balance("game after setup", &self.game_id());
             self.print_balance("player one after setup", &self.player_one.pubkey());
             self.print_balance("player two after setup", &self.player_two.pubkey());
         }
+    }
+
+    pub fn play(&mut self, tile: Tile) -> GameAccount {
+        let is_player_one = self.get_game_account().turn % 2 == 1;
+        let player_pub_key = if is_player_one {
+            self.player_one.pubkey()
+        } else {
+            self.player_two.pubkey()
+        };
+
+        if self.print_balances {
+            self.print_balance("before play", &player_pub_key);
+        }
+
+        let mut instruction_data = get_anchor_discriminator("global:play").to_vec();
+        tile.serialize(&mut instruction_data).unwrap();
+
+        let play_instruction = Instruction::new_with_bytes(
+            self.program_id,
+            &instruction_data,
+            vec![
+                AccountMeta::new(self.game_id(), false),
+                AccountMeta::new(player_pub_key, true),
+            ],
+        );
+
+        let rpc_client = self.rpc_client(CommitmentConfig::finalized());
+        let recent_block_hash = rpc_client.get_latest_blockhash().unwrap();
+
+        let transaction = if is_player_one {
+            let mut t =
+                Transaction::new_with_payer(&[play_instruction], Some(&self.player_one.pubkey()));
+            t.sign(&vec![&self.player_one], recent_block_hash);
+            t
+        } else {
+            let mut t = Transaction::new_with_payer(&[play_instruction], None);
+            t.sign(&vec![&self.player_two], recent_block_hash);
+            t
+        };
+
+        match send_transaction_and_print_logs(&self.rpc_client_url, &transaction) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Error in play: {:?}", e);
+                std::process::exit(1);
+            }
+        }
+
+        if self.print_balances {
+            self.print_balance("game after play", &self.game_id());
+            self.print_balance("player one after play", &self.player_one.pubkey());
+            self.print_balance("player two after play", &self.player_two.pubkey());
+        }
+
+        self.get_game_account()
     }
 }

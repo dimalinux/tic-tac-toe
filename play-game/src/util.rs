@@ -85,6 +85,5 @@ pub fn print_balance(rpc_client: &RpcClient, name: &str, public_key: &Pubkey) {
 
 pub fn get_payer_key() -> Keypair {
     let path = &*SOLANA_CONFIG.keypair_path;
-    let payer = Keypair::read_from_file(path).unwrap();
-    payer
+    Keypair::read_from_file(path).unwrap()
 }

@@ -34,12 +34,12 @@ pub fn send_transaction_and_print_logs(
             Ok(transaction_with_meta) => transaction_with_meta,
             Err(err) => {
                 eprintln!("Failed to get transaction: {:?}", err);
-                return Err(err.into());
+                return Err(err);
             }
         };
     let meta = transaction_with_meta.transaction.meta.unwrap();
     if let OptionSerializer::Some(logs) = meta.log_messages {
-        if logs.len() > 0 {
+        if !logs.is_empty() {
             println!("Logs:");
             for log_message in logs {
                 println!("  {}", log_message);
