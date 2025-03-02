@@ -1,5 +1,6 @@
-use crate::errors::TicTacToeError;
 use anchor_lang::prelude::*;
+
+use crate::errors::TicTacToeError;
 
 #[account]
 pub struct Game {
@@ -33,10 +34,20 @@ impl Game {
 
     pub fn play(&mut self, tile: &Tile) -> Result<()> {
         require!(self.is_active(), TicTacToeError::GameAlreadyOver);
-        require!(tile.row < 3 && tile.column < 3, TicTacToeError::TileOutOfBounds);
-        let (r, c) = (tile.row as usize, tile.column as usize);
-        require!(self.board[r][c].is_none(), TicTacToeError::TileAlreadySet);
-        self.board[r][c] = Some(Sign::from(self.current_player_index()));
+        let (row, col) = (tile.0 as usize, tile.1 as usize);
+        require!(row < 3 && col < 3, TicTacToeError::TileOutOfBounds);
+        msg!(
+            "Player {} plays at ({}, {}), old({:?})",
+            self.current_player_index(),
+            row,
+            col,
+            self.board[row][col]
+        );
+        require!(
+            self.board[row][col].is_none(),
+            TicTacToeError::TileAlreadySet
+        );
+        self.board[row][col] = Some(Sign::from(self.current_player_index()));
 
         self.update_state();
 
@@ -63,7 +74,9 @@ impl Game {
                 self.is_winning_trio([(0, 1), (1, 1), (2, 1)]) || // column 1
                 self.is_winning_trio([(0, 2), (1, 2), (2, 2)]) || // column 2
                 self.is_winning_trio([(0, 0), (1, 1), (2, 2)]) || // diagonal left to right
-                self.is_winning_trio([(0, 2), (1, 1), (2, 0)]) {  // diagonal right to left
+                self.is_winning_trio([(0, 2), (1, 1), (2, 0)])
+            {
+                // diagonal right to left
                 self.state = GameState::Won {
                     winner: self.current_player(),
                 };
@@ -86,9 +99,7 @@ pub enum GameState {
     Won { winner: Pubkey },
 }
 
-#[derive(
-    AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq,
-)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Sign {
     X,
     O,
@@ -105,7 +116,4 @@ impl From<usize> for Sign {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct Tile {
-    row: u8,
-    column: u8,
-}
+pub struct Tile(u8, u8); // row, column

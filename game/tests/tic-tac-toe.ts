@@ -124,7 +124,7 @@ class Game {
         }
 
         await this.program.methods
-            .play({row, column: col})
+            .play([row, col])
             .accounts({
                 player: playerPubKey,
                 game: this.gameKeypair.publicKey,
@@ -213,7 +213,7 @@ describe('tic-tac-toe', () => {
         // Have player2 go first
         try {
             await game.program.methods
-                .play({row: 0, column: 0})
+                .play([0, 0])
                 .accounts({
                     player: playerTwo.publicKey,
                     game: game.gameKeypair.publicKey,
@@ -233,7 +233,7 @@ describe('tic-tac-toe', () => {
         // Now have playerOne move out of turn
         try {
             await game.program.methods
-                .play({row: 1, column: 0})
+                .play([1, 0])
                 .accounts({
                     player: playerOne.publicKey,
                     game: game.gameKeypair.publicKey,
