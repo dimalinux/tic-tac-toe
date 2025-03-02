@@ -38,7 +38,7 @@ impl Game {
         require!(row < 3 && col < 3, TicTacToeError::TileOutOfBounds);
         msg!(
             "Player {} plays at ({}, {}), old({:?})",
-            self.current_player_index(),
+            self.current_player_index() + 1,
             row,
             col,
             self.board[row][col]
