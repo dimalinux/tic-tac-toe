@@ -8,14 +8,10 @@ use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status_client_types::UiTransactionEncoding;
 
 pub fn send_transaction_and_print_logs(
-    rpc_client_url: &String,
+    rpc_client: &RpcClient,
     transaction: &Transaction,
 ) -> solana_client::client_error::Result<()> {
-    let rpc_client = RpcClient::new_with_commitment(rpc_client_url, CommitmentConfig::finalized());
-    let signature = match rpc_client.send_and_confirm_transaction_with_spinner_and_commitment(
-        transaction,
-        CommitmentConfig::finalized(),
-    ) {
+    let signature = match rpc_client.send_and_confirm_transaction_with_spinner(transaction) {
         Ok(sig) => sig,
         Err(err) => {
             eprintln!("Transaction failed: {:?}", err);
@@ -26,7 +22,7 @@ pub fn send_transaction_and_print_logs(
 
     let rpc_trans_config = RpcTransactionConfig {
         encoding: Some(UiTransactionEncoding::Json),
-        commitment: Some(CommitmentConfig::finalized()),
+        commitment: Some(CommitmentConfig::confirmed()),
         ..RpcTransactionConfig::default()
     };
     let transaction_with_meta =
@@ -68,14 +64,14 @@ mod tests {
     };
 
     use super::*;
-    use crate::util::{get_payer_key, get_rpc_client};
+    use crate::util::get_payer_key;
 
     #[test]
     fn test_transfer_sol() {
         let payer = get_payer_key();
         let dest_account = Keypair::new();
 
-        let rpc_client = get_rpc_client(CommitmentConfig::finalized());
+        let rpc_client = RpcClient::new_with_commitment("localhost", CommitmentConfig::processed());
         let lamports = native_token::sol_to_lamports(0.1);
 
         let start_bal_from = rpc_client.get_balance(&payer.pubkey()).unwrap();

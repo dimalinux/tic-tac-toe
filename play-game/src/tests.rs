@@ -1,33 +1,31 @@
-use solana_program::{native_token, pubkey::Pubkey};
-use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair, signer::Signer};
+use solana_client::rpc_client::RpcClient;
+use solana_program::pubkey::Pubkey;
+use solana_sdk::{signature::Keypair, signer::Signer};
 
-use crate::{
-    game::{
-        Game, GameAccount,
-        GameState::{Active, Tie, Won},
-        Sign::{O, X},
-    },
-    transaction,
-    util::get_rpc_client,
+use crate::game::{
+    Game, GameAccount,
+    GameState::{Active, Tie, Won},
+    Sign::{O, X},
 };
 
-fn new_game(program_id: &Pubkey, payer: &Keypair) -> Game {
-    let player_one = Keypair::new();
-    let player_two = Keypair::new();
-
-    let rpc_client = get_rpc_client(CommitmentConfig::finalized());
-
-    let lamports = native_token::sol_to_lamports(1.0);
-    transaction::transfer(&rpc_client, lamports, payer, &player_one.pubkey());
-    transaction::transfer(&rpc_client, lamports, payer, &player_two.pubkey());
-
-    let game = Game::new(*program_id, rpc_client.url(), player_one, player_two);
+fn new_game<'a>(
+    program_id: &'a Pubkey,
+    rpc_client: &'a RpcClient,
+    player_one: &'a Keypair,
+    player_two: &'a Keypair,
+) -> Game<'a> {
+    let game = Game::new(program_id, rpc_client, player_one, player_two);
     game.setup_game();
     game
 }
 
-pub(crate) fn play_player_one_wins_game(program_id: &Pubkey, payer: &Keypair) {
-    let mut game = new_game(program_id, payer);
+pub(crate) fn play_player_one_wins_game(
+    program_id: &Pubkey,
+    rpc_client: &RpcClient,
+    player_one: &Keypair,
+    player_two: &Keypair,
+) {
+    let mut game = new_game(program_id, rpc_client, player_one, player_two);
 
     assert_eq!(
         game.play((0, 0)),
@@ -102,20 +100,13 @@ pub(crate) fn play_player_one_wins_game(program_id: &Pubkey, payer: &Keypair) {
     );
 }
 
-pub(crate) fn tie_game(program_id: &Pubkey, payer: &Keypair) {
-    /*
-    await game.play([0, 0], ACTIVE_STATE);
-    await game.play([1, 1], ACTIVE_STATE);
-    await game.play([2, 0], ACTIVE_STATE);
-    await game.play([1, 0], ACTIVE_STATE);
-    await game.play([1, 2], ACTIVE_STATE);
-    await game.play([0, 1], ACTIVE_STATE);
-    await game.play([2, 1], ACTIVE_STATE);
-    await game.play([2, 2], ACTIVE_STATE);
-    await game.play([0, 2], TIE_STATE);
-     */
-
-    let mut game = new_game(program_id, payer);
+pub(crate) fn tie_game(
+    program_id: &Pubkey,
+    rpc_client: &RpcClient,
+    player_one: &Keypair,
+    player_two: &Keypair,
+) {
+    let mut game = new_game(program_id, rpc_client, player_one, player_two);
 
     assert_eq!(
         game.play((0, 0)),

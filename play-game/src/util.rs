@@ -5,7 +5,6 @@ use once_cell::sync::Lazy;
 use solana_client::rpc_client::RpcClient;
 use solana_program::pubkey::Pubkey;
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
     native_token,
     signature::{read_keypair_file, EncodableKey, Keypair, Signer},
 };
@@ -18,20 +17,7 @@ pub struct Config {
 
 pub fn get_program_id() -> Pubkey {
     const PROGRAM_KEYPAIR_PATH: &str = "../game/target/deploy/tic_tac_toe-keypair.json";
-    *Lazy::new(|| {
-        let program_id = read_keypair_file(PROGRAM_KEYPAIR_PATH).unwrap().pubkey();
-        match get_rpc_client(CommitmentConfig::processed()).get_account(&program_id) {
-            Ok(account) => {
-                println!("Program ID: {}", program_id);
-                account
-            }
-            Err(err) => {
-                eprintln!("ERROR PROGRAM ID {} NOT DEPLOYED: {}", program_id, err);
-                std::process::exit(1);
-            }
-        };
-        program_id
-    })
+    *Lazy::new(|| read_keypair_file(PROGRAM_KEYPAIR_PATH).unwrap().pubkey())
 }
 
 static SOLANA_CONFIG: Lazy<Config> = Lazy::new(|| {
@@ -42,10 +28,6 @@ static SOLANA_CONFIG: Lazy<Config> = Lazy::new(|| {
 
 pub fn get_rpc_url() -> String {
     SOLANA_CONFIG.json_rpc_url.clone()
-}
-
-pub fn get_rpc_client(config: CommitmentConfig) -> RpcClient {
-    RpcClient::new_with_commitment(get_rpc_url(), config)
 }
 
 pub fn get_anchor_discriminator(input: &str) -> [u8; 8] {
