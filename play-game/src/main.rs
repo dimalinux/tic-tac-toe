@@ -18,10 +18,13 @@ fn main() {
     // Fund the players
     let player_one = Keypair::new();
     let player_two = Keypair::new();
-    let lamports = native_token::sol_to_lamports(0.20);
+    let lamports = native_token::sol_to_lamports(0.01);
     transaction::transfer(&rpc_client, lamports, &payer, &player_one.pubkey());
     transaction::transfer(&rpc_client, lamports, &payer, &player_two.pubkey());
 
     tests::play_player_one_wins_game(&program_id, &rpc_client, &player_one, &player_two);
     tests::tie_game(&program_id, &rpc_client, &player_one, &player_two);
+
+    transaction::sweep(&rpc_client, &player_one, &payer.pubkey());
+    transaction::sweep(&rpc_client, &player_two, &payer.pubkey());
 }

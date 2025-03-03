@@ -33,7 +33,7 @@ function addressString(publicKey: anchor.web3.PublicKey, name: string) {
 class Game {
     public readonly program: anchor.Program<TicTacToe>;
     public readonly programProvider: anchor.AnchorProvider;
-    private readonly printBalances: boolean = false;
+    private readonly printBalances: boolean = true;
 
     public gameKeypair: anchor.web3.Keypair;
     public playerOne: Wallet;

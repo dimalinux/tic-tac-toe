@@ -165,14 +165,19 @@ impl<'a> Game<'a> {
         let recent_block_hash = self.rpc_client.get_latest_blockhash().unwrap();
 
         let transaction = if is_player_one {
-            let mut t =
-                Transaction::new_with_payer(&[play_instruction], Some(&self.player_one.pubkey()));
-            t.sign(&vec![&self.player_one], recent_block_hash);
-            t
+            Transaction::new_signed_with_payer(
+                &[play_instruction],
+                Some(&self.player_one.pubkey()),
+                &vec![&self.player_one],
+                recent_block_hash,
+            )
         } else {
-            let mut t = Transaction::new_with_payer(&[play_instruction], None);
-            t.sign(&vec![&self.player_two], recent_block_hash);
-            t
+            Transaction::new_signed_with_payer(
+                &[play_instruction],
+                None,
+                &vec![&self.player_two],
+                recent_block_hash,
+            )
         };
 
         match send_transaction_and_print_logs(self.rpc_client, &transaction) {
