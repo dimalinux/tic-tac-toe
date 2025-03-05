@@ -1,19 +1,22 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::TicTacToeError;
+type Board = [[Option<Sign>; 3]; 3];
 
 #[account]
 pub struct Game {
-    players: [Pubkey; 2],          // (32 * 2)
-    turn: u8,                      // 1
-    board: [[Option<Sign>; 3]; 3], // 9 * (1 + 1) = 18
-    state: GameState,              // 32 + 1
+    players: [Pubkey; 2], // (32 * 2)
+    turn: u8,             // 1
+    board: Board,         // 9 * (1 + 1) = 18
+    state: GameState,     // 32 + 1
 }
 
 impl Game {
     pub const MAXIMUM_SIZE: usize = (32 * 2) + 1 + (9 * (1 + 1)) + (32 + 1);
 
     pub fn start(&mut self, players: [Pubkey; 2]) -> Result<()> {
+        // This next error can't happen, because SetupGame is the only
+        // caller of `start`.
         require_eq!(self.turn, 0, TicTacToeError::GameAlreadyStarted);
         self.players = players;
         self.turn = 1;
@@ -66,22 +69,21 @@ impl Game {
     }
 
     fn update_state(&mut self) {
-        if self.turn >= 5 {
-            if self.is_winning_trio([(0, 0), (0, 1), (0, 2)]) ||  // row 0
+        if self.turn >= 5
+            && (self.is_winning_trio([(0, 0), (0, 1), (0, 2)]) || // row 0
                 self.is_winning_trio([(1, 0), (1, 1), (1, 2)]) || // row 1
                 self.is_winning_trio([(2, 0), (2, 1), (2, 2)]) || // row 2
                 self.is_winning_trio([(0, 0), (1, 0), (2, 0)]) || // column 0
                 self.is_winning_trio([(0, 1), (1, 1), (2, 1)]) || // column 1
                 self.is_winning_trio([(0, 2), (1, 2), (2, 2)]) || // column 2
                 self.is_winning_trio([(0, 0), (1, 1), (2, 2)]) || // diagonal left to right
-                self.is_winning_trio([(0, 2), (1, 1), (2, 0)])
-            {
-                // diagonal right to left
-                self.state = GameState::Won {
-                    winner: self.current_player(),
-                };
-                return;
-            }
+                self.is_winning_trio([(0, 2), (1, 1), (2, 0)] /*diagonal right to left*/))
+        {
+            // diagonal right to left
+            self.state = GameState::Won {
+                winner: self.current_player(),
+            };
+            return;
         }
 
         // maintain the state as Active if there have been less than 9 turns

@@ -22,4 +22,6 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/*.ts"
+format = "cargo +nightly fmt && prettier --write 'tests/*.ts'"
+lint = "cargo clippy && yarn dlx eslint --ext .ts tests/"
 generate-clients = "yarn ts-node ./scripts/generate-clients.ts"
